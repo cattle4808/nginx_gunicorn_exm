@@ -4,56 +4,56 @@
 
 Создаём и настраиваем файл `gunicorn.service` для работы через systemd:
 
-### **gunicorn-def.service**
+### **gunicorn.service**
 
 ```ini
 [Unit]
 Description=Gunicorn service for Django project
 After=network.target
-Requires=gunicorn-def.socket
+Requires=gunicorn.socket
 
 [Service]
-User=root
-Group=root
+User=www-data
+Group=www-data
 WorkingDirectory=/path/to/your/project
 ExecStart=/path/to/your/project/.venv/bin/gunicorn \
     --access-logfile - \
     --workers 3 \
-    --bind unix:/run/gunicorn-def.sock \
-    your_project_name.wsgi:application
+    --bind unix:/run/gunicorn.sock \
+    project_name.wsgi:application
 Restart=always
 
 [Install]
 WantedBy=multi-user.target
 ```
 
-- **User и Group**: Указывают пользователя и группу, под которыми будет работать Gunicorn.
+- **User и Group**: Указывают пользователя и группу, под которыми будет работать Gunicorn (обычно `www-data`).
 - **WorkingDirectory**: Путь к корню вашего Django-проекта.
 - **ExecStart**: Полный путь к Gunicorn внутри виртуального окружения с параметрами запуска.
-- **--bind unix:/run/gunicorn-def.sock**: Используем Unix-сокет для взаимодействия с Nginx.
+- **--bind unix:/run/gunicorn.sock**: Используем Unix-сокет для взаимодействия с Nginx.
 
 После сохранения:
 
 ```bash
 systemctl daemon-reload
-systemctl start gunicorn-def.service
-systemctl enable gunicorn-def.service
+systemctl start gunicorn.service
+systemctl enable gunicorn.service
 ```
 
 ---
 
 ## 2. Настройка сокета Gunicorn
 
-Создаём файл `gunicorn-def.socket` для взаимодействия через сокет:
+Создаём файл `gunicorn.socket` для взаимодействия через сокет:
 
-### **gunicorn-def.socket**
+### **gunicorn.socket**
 
 ```ini
 [Unit]
 Description=Gunicorn socket for Django project
 
 [Socket]
-ListenStream=/run/gunicorn-def.sock
+ListenStream=/run/gunicorn.sock
 SocketUser=www-data
 SocketGroup=www-data
 SocketMode=0660
@@ -66,45 +66,45 @@ WantedBy=sockets.target
 
 ```bash
 systemctl daemon-reload
-systemctl start gunicorn-def.socket
-systemctl enable gunicorn-def.socket
+systemctl start gunicorn.socket
+systemctl enable gunicorn.socket
 ```
 
 Проверить, создаётся ли сокет:
 
 ```bash
-ls -l /run/gunicorn-def.sock
+ls -l /run/gunicorn.sock
 ```
 
 ---
 
 ## 3. Настройка Nginx
 
-Создаём конфигурационный файл для Nginx в `/etc/nginx/sites-available/<your_project>`:
+Создаём конфигурационный файл для Nginx в `/etc/nginx/sites-available/<project_name>`:
 
 ### **nginx.conf для сайта**
 
 ```nginx
 server {
     listen 80;
-    server_name your_domain_or_ip;
+    server_name example.com www.example.com;
 
     location / {
-        proxy_pass http://unix:/run/gunicorn-def.sock;
+        proxy_pass http://unix:/run/gunicorn.sock;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    error_log /var/log/nginx/your_project_error.log;
-    access_log /var/log/nginx/your_project_access.log;
+    error_log /var/log/nginx/project_name_error.log;
+    access_log /var/log/nginx/project_name_access.log;
 }
 ```
 
 1. **proxy_pass**: Указывает, что запросы будут перенаправляться через сокет Gunicorn.
 2. **proxy_set_header**: Передаёт важные заголовки от клиента для корректной работы.
-3. **server_name**: Укажите ваш домен или IP-адрес.
+3. **server_name**: Укажите ваш домен или IP-адрес (например, `example.com`).
 
 ---
 
@@ -113,7 +113,7 @@ server {
 Создаём символическую ссылку, чтобы Nginx видел конфигурацию:
 
 ```bash
-ln -s /etc/nginx/sites-available/<your_project> /etc/nginx/sites-enabled/
+ln -s /etc/nginx/sites-available/<project_name> /etc/nginx/sites-enabled/
 ```
 
 Проверяем конфигурацию Nginx:
@@ -134,7 +134,7 @@ systemctl restart nginx
 
 1. Убедитесь, что Gunicorn работает:
    ```bash
-   systemctl status gunicorn-def.service
+   systemctl status gunicorn.service
    ```
 
 2. Убедитесь, что Nginx работает и обслуживает сайт:
@@ -152,7 +152,7 @@ systemctl restart nginx
 
 ```bash
 apt install certbot python3-certbot-nginx
-certbot --nginx -d your_domain -d www.your_domain
+certbot --nginx -d example.com -d www.example.com
 ```
 
 Автообновление сертификатов:
