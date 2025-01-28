@@ -1,10 +1,9 @@
-# Шаблон настройки Nginx и Gunicorn для Django-проектов
+# Nginx and Gunicorn Configuration Template for Django Projects
 
-## 1. Настройка Gunicorn
-
-Создаём и настраиваем файл `gunicorn.service` для работы через systemd:
+## 1. Gunicorn Setup
 
 ### **gunicorn.service**
+Create the file `/etc/systemd/system/gunicorn.service` and add the following:
 
 ```ini
 [Unit]
@@ -27,13 +26,7 @@ Restart=always
 WantedBy=multi-user.target
 ```
 
-- **User и Group**: Указывают пользователя и группу, под которыми будет работать Gunicorn (обычно `www-data`).
-- **WorkingDirectory**: Путь к корню вашего Django-проекта.
-- **ExecStart**: Полный путь к Gunicorn внутри виртуального окружения с параметрами запуска.
-- **--bind unix:/run/gunicorn.sock**: Используем Unix-сокет для взаимодействия с Nginx.
-
-После сохранения:
-
+### Start and Enable Gunicorn
 ```bash
 systemctl daemon-reload
 systemctl start gunicorn.service
@@ -42,11 +35,10 @@ systemctl enable gunicorn.service
 
 ---
 
-## 2. Настройка сокета Gunicorn
-
-Создаём файл `gunicorn.socket` для взаимодействия через сокет:
+## 2. Gunicorn Socket Setup
 
 ### **gunicorn.socket**
+Create the file `/etc/systemd/system/gunicorn.socket`:
 
 ```ini
 [Unit]
@@ -62,27 +54,24 @@ SocketMode=0660
 WantedBy=sockets.target
 ```
 
-После сохранения:
-
+### Start and Enable the Socket
 ```bash
 systemctl daemon-reload
 systemctl start gunicorn.socket
 systemctl enable gunicorn.socket
 ```
 
-Проверить, создаётся ли сокет:
-
+### Verify the Socket
 ```bash
 ls -l /run/gunicorn.sock
 ```
 
 ---
 
-## 3. Настройка Nginx
+## 3. Nginx Configuration
 
-Создаём конфигурационный файл для Nginx в `/etc/nginx/sites-available/<project_name>`:
-
-### **nginx.conf для сайта**
+### **Nginx Site Configuration**
+Create the file `/etc/nginx/sites-available/<project_name>`:
 
 ```nginx
 server {
@@ -97,67 +86,60 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    error_log /var/log/nginx/project_name_error.log;
-    access_log /var/log/nginx/project_name_access.log;
+    error_log /var/log/nginx/<project_name>_error.log;
+    access_log /var/log/nginx/<project_name>_access.log;
 }
 ```
 
-1. **proxy_pass**: Указывает, что запросы будут перенаправляться через сокет Gunicorn.
-2. **proxy_set_header**: Передаёт важные заголовки от клиента для корректной работы.
-3. **server_name**: Укажите ваш домен или IP-адрес (например, `example.com`).
+### Enable the Configuration
+1. Create a symbolic link:
+   ```bash
+   ln -s /etc/nginx/sites-available/<project_name> /etc/nginx/sites-enabled/
+   ```
+
+2. Test the configuration:
+   ```bash
+   nginx -t
+   ```
+
+3. Restart Nginx:
+   ```bash
+   systemctl restart nginx
+   ```
 
 ---
 
-## 4. Подключение конфигурации Nginx
+## 4. Enable SSL with Let's Encrypt
 
-Создаём символическую ссылку, чтобы Nginx видел конфигурацию:
+1. Install Certbot:
+   ```bash
+   apt install certbot python3-certbot-nginx
+   ```
 
-```bash
-ln -s /etc/nginx/sites-available/<project_name> /etc/nginx/sites-enabled/
-```
+2. Obtain and configure the certificate:
+   ```bash
+   certbot --nginx -d example.com -d www.example.com
+   ```
 
-Проверяем конфигурацию Nginx:
-
-```bash
-nginx -t
-```
-
-Перезапускаем Nginx:
-
-```bash
-systemctl restart nginx
-```
+3. Enable auto-renewal of certificates:
+   ```bash
+   systemctl enable certbot.timer
+   ```
 
 ---
 
-## 5. Проверка работы
+## 5. Testing the Setup
 
-1. Убедитесь, что Gunicorn работает:
+1. Check Gunicorn status:
    ```bash
    systemctl status gunicorn.service
    ```
 
-2. Убедитесь, что Nginx работает и обслуживает сайт:
+2. Check Nginx status:
    ```bash
    systemctl status nginx
    ```
 
-3. Откройте браузер и зайдите по вашему домену или IP.
+3. Open your website in a browser (HTTP/HTTPS).
 
 ---
-
-## 6. Дополнительно: Настройка SSL
-
-Для HTTPS установите бесплатный сертификат Let's Encrypt:
-
-```bash
-apt install certbot python3-certbot-nginx
-certbot --nginx -d example.com -d www.example.com
-```
-
-Автообновление сертификатов:
-
-```bash
-systemctl enable certbot.timer
-```
-
